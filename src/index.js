@@ -52,7 +52,7 @@ app.use(morgan("dev"));
 
 app.use(
   express.json({
-    limit: "1mb",
+    limit: "18mb",
   }),
 );
 
