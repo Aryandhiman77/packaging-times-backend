@@ -21,6 +21,7 @@
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "cookie-parser": "^1.4.7",
-    "nodemailer": "^6.10.1"
+    "nodemailer": "^6.10.1",
+    "sanitize-html": "^2.14.0"
   }
 }

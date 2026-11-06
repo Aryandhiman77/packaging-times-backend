@@ -152,6 +152,98 @@ const newsSchema = new Schema(
 
 export const News = model("News", newsSchema);
 
+// Every document represents one category content page.
+
+export const STORY_CATEGORIES = ["trends", "flexibles", "rigid", "advertising"];
+
+const contentPageSchema = new Schema(
+  {
+    category: {
+      type: String,
+      enum: STORY_CATEGORIES,
+      required: true,
+      index: true,
+    },
+
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 180,
+    },
+
+    slug: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+      maxlength: 120,
+    },
+
+    html: {
+      type: String,
+      required: true,
+      maxlength: 200000,
+    },
+
+    order: {
+      type: Number,
+      default: 1,
+      min: 1,
+      max: 100000,
+    },
+
+    status: {
+      type: String,
+      enum: ["draft", "published"],
+      default: "draft",
+      index: true,
+    },
+
+    metaTitle: {
+      type: String,
+      default: "",
+      maxlength: 70,
+    },
+
+    metaDescription: {
+      type: String,
+      default: "",
+      maxlength: 170,
+    },
+
+    seoImage: {
+      type: String,
+      default: "",
+      maxlength: 1000,
+    },
+
+    robots: {
+      type: String,
+      enum: ["index,follow", "noindex,nofollow"],
+      default: "index,follow",
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
+
+// Category + slug must be unique.
+
+contentPageSchema.index({ category: 1, slug: 1 }, { unique: true });
+
+// Used to fetch published pages in the right order.
+
+contentPageSchema.index({
+  category: 1,
+  status: 1,
+  order: 1,
+  createdAt: 1,
+});
+
+export const ContentPage = model("ContentPage", contentPageSchema);
+
 const settingsSchema = new Schema(
   {
     key: {

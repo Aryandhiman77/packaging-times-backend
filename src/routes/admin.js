@@ -2,6 +2,7 @@ import { Router } from "express";
 import { schemas, validateBody, validateId } from "../middleware/joi.js";
 import { asyncHandler } from "../middleware/validate.js";
 import { oneImage, saveImage, deleteImage } from "../utils/upload.js";
+import sanitizeHtml from "sanitize-html";
 import {
   Banner,
   News,
@@ -9,25 +10,106 @@ import {
   Subscriber,
   Contact,
   AdvertisingInquiry,
+  ContentPage,
+  STORY_CATEGORIES,
 } from "../models/index.js";
 
 import { deliverSubmission } from "../services/notifications.js";
 const router = Router();
 const PAGE_SIZE = 10;
 
+const cleanContent = (raw) =>
+  sanitizeHtml(raw, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+      "img",
+      "div",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "span",
+      "figure",
+      "figcaption",
+      "table",
+      "thead",
+      "tbody",
+      "tr",
+      "td",
+      "th",
+      "u",
+      "s",
+    ]),
+
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+
+      "*": ["class", "style"],
+
+      a: ["href", "name", "target", "rel", "class", "style"],
+
+      img: ["src", "alt", "width", "height", "loading", "style", "class"],
+    },
+
+    allowedStyles: {
+      "*": {
+        color: [/^#[0-9a-fA-F]{3,8}$/, /^rgb\(.*\)$/, /^[a-zA-Z]+$/],
+
+        "background-color": [
+          /^#[0-9a-fA-F]{3,8}$/,
+          /^rgb\(.*\)$/,
+          /^[a-zA-Z]+$/,
+        ],
+
+        "text-align": [/^(left|right|center|justify)$/],
+
+        "font-size": [/^\d+(px|em|rem|%)$/],
+      },
+    },
+
+    allowedSchemes: ["http", "https", "mailto"],
+
+    allowProtocolRelative: false,
+
+    transformTags: {
+      a: (name, attrs) => ({
+        tagName: "a",
+
+        attribs:
+          attrs.target === "_blank"
+            ? {
+                ...attrs,
+                rel: "noopener noreferrer",
+              }
+            : attrs,
+      }),
+    },
+  });
+
+const slugTaken = (err) => err?.code === 11000;
+
 const escapeRegex = (value) =>
   String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const searchWhere = (value, fields) => {
-  const term = String(value || "").trim().slice(0, 120);
+  const term = String(value || "")
+    .trim()
+    .slice(0, 120);
   if (!term) return {};
   const regex = new RegExp(escapeRegex(term), "i");
   return { $or: fields.map((field) => ({ [field]: regex })) };
 };
 
-async function paginated(Model, where, req, sort = { updatedAt: -1, createdAt: -1 }) {
+async function paginated(
+  Model,
+  where,
+  req,
+  sort = { updatedAt: -1, createdAt: -1 },
+) {
   const requestedPage = Number.parseInt(req.query.page, 10);
-  const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const page =
+    Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const total = await Model.countDocuments(where);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -53,7 +135,8 @@ async function paginated(Model, where, req, sort = { updatedAt: -1, createdAt: -
 const bannerLifecycle = (item, now = Date.now()) => {
   if (item.endsAt && new Date(item.endsAt).getTime() < now) return "expired";
   if (!item.isActive) return "inactive";
-  if (item.startsAt && new Date(item.startsAt).getTime() > now) return "scheduled";
+  if (item.startsAt && new Date(item.startsAt).getTime() > now)
+    return "scheduled";
   return "active";
 };
 
@@ -72,6 +155,196 @@ const bannerData = (b) => ({
 function dateRangeOk(data) {
   return !(data.startsAt && data.endsAt && data.startsAt > data.endsAt);
 }
+
+// Upload image from CKEditor.
+
+router.post(
+  "/content-images",
+  oneImage,
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      return res.status(422).json({
+        message: "Select an image.",
+      });
+    }
+
+    const url = await saveImage(req.file);
+
+    res.status(201).json({
+      data: {
+        url,
+      },
+    });
+  }),
+);
+
+// List admin content pages.
+// Supports category, status, search and pagination.
+
+router.get(
+  "/content-pages",
+  asyncHandler(async (req, res) => {
+    const where = {
+      ...searchWhere(req.query.search, ["title", "slug", "html"]),
+    };
+
+    if (req.query.category && req.query.category !== "all") {
+      if (!STORY_CATEGORIES.includes(req.query.category)) {
+        return res.status(400).json({
+          message: "Invalid category.",
+        });
+      }
+
+      where.category = req.query.category;
+    }
+
+    if (req.query.status && req.query.status !== "all") {
+      if (!["draft", "published"].includes(req.query.status)) {
+        return res.status(400).json({
+          message: "Invalid status.",
+        });
+      }
+
+      where.status = req.query.status;
+    }
+
+    const data = await paginated(ContentPage, where, req, {
+      category: 1,
+      order: 1,
+      createdAt: 1,
+      _id: 1,
+    });
+
+    if (where.category) {
+      const latest = await ContentPage.findOne({
+        category: where.category,
+      })
+        .sort({ order: -1 })
+        .select("order")
+        .lean();
+
+      data.nextOrder = (latest?.order || 0) + 1;
+    }
+
+    res.json({
+      data,
+    });
+  }),
+);
+
+// Get one admin content page.
+
+router.get(
+  "/content-pages/:id",
+  validateId,
+  asyncHandler(async (req, res) => {
+    const item = await ContentPage.findById(req.params.id).lean();
+
+    if (!item) {
+      return res.status(404).json({
+        message: "Page not found.",
+      });
+    }
+
+    res.json({
+      data: item,
+    });
+  }),
+);
+
+// Create a new content page.
+
+router.post(
+  "/content-pages",
+  validateBody(schemas.contentPage),
+  asyncHandler(async (req, res) => {
+    try {
+      const item = await ContentPage.create({
+        ...req.body,
+
+        html: cleanContent(req.body.html),
+      });
+
+      res.status(201).json({
+        data: item,
+      });
+    } catch (err) {
+      if (slugTaken(err)) {
+        return res.status(409).json({
+          message: "This category already has a page with that slug.",
+        });
+      }
+
+      throw err;
+    }
+  }),
+);
+
+// Update an existing content page.
+
+router.patch(
+  "/content-pages/:id",
+  validateId,
+  validateBody(schemas.contentPage),
+  asyncHandler(async (req, res) => {
+    try {
+      const item = await ContentPage.findByIdAndUpdate(
+        req.params.id,
+
+        {
+          $set: {
+            ...req.body,
+            html: cleanContent(req.body.html),
+          },
+        },
+
+        {
+          new: true,
+          runValidators: true,
+        },
+      );
+
+      if (!item) {
+        return res.status(404).json({
+          message: "Page not found.",
+        });
+      }
+
+      res.json({
+        data: item,
+      });
+    } catch (err) {
+      if (slugTaken(err)) {
+        return res.status(409).json({
+          message: "This category already has a page with that slug.",
+        });
+      }
+
+      throw err;
+    }
+  }),
+);
+
+// Delete a content page.
+
+router.delete(
+  "/content-pages/:id",
+  validateId,
+  asyncHandler(async (req, res) => {
+    const removed = await ContentPage.findByIdAndDelete(req.params.id);
+
+    if (!removed) {
+      return res.status(404).json({
+        message: "Page not found.",
+      });
+    }
+
+    res.json({
+      message: "Page deleted.",
+    });
+  }),
+);
+
 router.get(
   "/dashboard",
   asyncHandler(async (req, res) => {
@@ -139,7 +412,12 @@ router.get(
   asyncHandler(async (req, res) => {
     const now = new Date();
     const where = {
-      ...searchWhere(req.query.search, ["title", "altText", "targetUrl", "slot"]),
+      ...searchWhere(req.query.search, [
+        "title",
+        "altText",
+        "targetUrl",
+        "slot",
+      ]),
     };
 
     if (req.query.sitePage && req.query.sitePage !== "all") {
@@ -153,9 +431,7 @@ router.get(
     } else if (req.query.status === "scheduled") {
       where.isActive = true;
       where.startsAt = { $gt: now };
-      where.$and = [
-        { $or: [{ endsAt: null }, { endsAt: { $gte: now } }] },
-      ];
+      where.$and = [{ $or: [{ endsAt: null }, { endsAt: { $gte: now } }] }];
     } else if (req.query.status === "active") {
       where.isActive = true;
       where.$and = [
@@ -252,7 +528,12 @@ router.get(
   "/news",
   asyncHandler(async (req, res) => {
     const where = {
-      ...searchWhere(req.query.search, ["title", "excerpt", "body", "category"]),
+      ...searchWhere(req.query.search, [
+        "title",
+        "excerpt",
+        "body",
+        "category",
+      ]),
     };
     if (req.query.category && req.query.category !== "all") {
       where.category = req.query.category;
@@ -371,7 +652,8 @@ router.delete(
   validateId,
   asyncHandler(async (req, res) => {
     const item = await Subscriber.findByIdAndDelete(req.params.id);
-    if (!item) return res.status(404).json({ message: "Subscriber not found." });
+    if (!item)
+      return res.status(404).json({ message: "Subscriber not found." });
     res.json({ message: "Subscriber unsubscribed." });
   }),
 );
@@ -385,7 +667,8 @@ router.get(
       "message",
       "adminNote",
     ]);
-    if (req.query.status && req.query.status !== "all") where.status = req.query.status;
+    if (req.query.status && req.query.status !== "all")
+      where.status = req.query.status;
     if (["true", "false"].includes(req.query.read)) {
       where.isRead = req.query.read === "true";
     }
@@ -405,7 +688,8 @@ router.get(
       "message",
       "adminNote",
     ]);
-    if (req.query.status && req.query.status !== "all") where.status = req.query.status;
+    if (req.query.status && req.query.status !== "all")
+      where.status = req.query.status;
     if (["true", "false"].includes(req.query.read)) {
       where.isRead = req.query.read === "true";
     }

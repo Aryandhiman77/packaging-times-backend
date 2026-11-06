@@ -164,7 +164,6 @@ async function start() {
     console.log("MongoDB connected. Primary admin:", adminSync);
   } catch (error) {
     console.error("Startup failed:", error.message);
-
     process.exit(1);
   }
 

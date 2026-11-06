@@ -11,6 +11,8 @@ import {
   Contact,
   AdvertisingInquiry,
   ALL_PAGES,
+  ContentPage,
+  STORY_CATEGORIES,
 } from "../models/index.js";
 
 import { asyncHandler } from "../middleware/validate.js";
@@ -35,6 +37,72 @@ router.get("/health", (req, res) => {
     service: "packaging-times-api",
   });
 });
+
+// Fetch published page list for a category.
+// HTML body is excluded from this list.
+
+router.get(
+  "/content-pages/:category",
+  asyncHandler(async (req, res) => {
+    const { category } = req.params;
+
+    if (!STORY_CATEGORIES.includes(category)) {
+      return res.status(404).json({
+        message: "Not found.",
+      });
+    }
+
+    const docs = await ContentPage.find({
+      category,
+      status: "published",
+    })
+      .sort({
+        order: 1,
+        createdAt: 1,
+        _id: 1,
+      })
+      .select(
+        "title slug order metaTitle metaDescription seoImage robots createdAt updatedAt",
+      )
+      .lean();
+
+    res.json({
+      data: docs,
+    });
+  }),
+);
+
+// Fetch a single published page by its slug.
+// The HTML body is returned for rendering.
+
+router.get(
+  "/content-pages/:category/:slug",
+  asyncHandler(async (req, res) => {
+    const { category, slug } = req.params;
+
+    if (!STORY_CATEGORIES.includes(category)) {
+      return res.status(404).json({
+        message: "Not found.",
+      });
+    }
+
+    const item = await ContentPage.findOne({
+      category,
+      slug,
+      status: "published",
+    }).lean();
+
+    if (!item) {
+      return res.status(404).json({
+        message: "Page not found.",
+      });
+    }
+
+    res.json({
+      data: item,
+    });
+  }),
+);
 
 router.get(
   "/settings",

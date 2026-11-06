@@ -1,7 +1,7 @@
 import Joi from "joi";
 import mongoose from "mongoose";
 
-import { ALL_PAGES, AD_SLOTS } from "../models/index.js";
+import { ALL_PAGES, AD_SLOTS, STORY_CATEGORIES } from "../models/index.js";
 
 const requiredText = (min, max) =>
   Joi.string().trim().min(min).max(max).required();
@@ -19,6 +19,36 @@ const optionalUrl = Joi.string()
   .optional();
 
 export const schemas = {
+  contentPage: Joi.object({
+    category: Joi.string()
+      .valid(...STORY_CATEGORIES)
+      .required(),
+
+    title: requiredText(2, 180),
+
+    slug: Joi.string()
+      .trim()
+      .lowercase()
+      .pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .max(120)
+      .required(),
+
+    html: Joi.string().min(1).max(200000).required(),
+
+    order: Joi.number().integer().min(1).max(100000).default(1),
+
+    status: Joi.string().valid("draft", "published").default("draft"),
+
+    metaTitle: Joi.string().trim().max(70).allow("").default(""),
+
+    metaDescription: Joi.string().trim().max(170).allow("").default(""),
+
+    seoImage: optionalUrl.default(""),
+
+    robots: Joi.string()
+      .valid("index,follow", "noindex,nofollow")
+      .default("index,follow"),
+  }),
   banner: Joi.object({
     title: requiredText(2, 100),
     altText: Joi.string().trim().max(160).allow("").default(""),
