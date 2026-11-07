@@ -16,6 +16,7 @@ import {
 } from "../models/index.js";
 
 import { asyncHandler } from "../middleware/validate.js";
+import { servedImageUrl } from "../utils/upload.js";
 
 import { deliverSubmission } from "../services/notifications.js";
 
@@ -189,7 +190,10 @@ router.get(
 
     for (const item of ordered) {
       if (!slots[item.slot]) {
-        slots[item.slot] = item;
+        slots[item.slot] = {
+          ...item,
+          imageUrl: servedImageUrl(item.imageUrl),
+        };
       }
     }
 

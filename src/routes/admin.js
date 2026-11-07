@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { schemas, validateBody, validateId } from "../middleware/joi.js";
 import { asyncHandler } from "../middleware/validate.js";
-import { oneImage, saveImage, deleteImage } from "../utils/upload.js";
+import {
+  oneImage,
+  saveImage,
+  deleteImage,
+  servedImageUrl,
+} from "../utils/upload.js";
 import sanitizeHtml from "sanitize-html";
 import {
   Banner,
@@ -65,6 +70,10 @@ const cleanContent = (raw) =>
         "text-align": [/^(left|right|center|justify)$/],
 
         "font-size": [/^\d+(?:\.\d+)?(px|em|rem|%)$/],
+
+        "font-family": [
+          /^(?:["']?[a-zA-Z][a-zA-Z0-9 -]*["']?)(?:,\s*(?:["']?[a-zA-Z][a-zA-Z0-9 -]*["']?))*$/,
+        ],
 
         "line-height": [
           /^\d+(?:\.\d+)?$/,
@@ -510,6 +519,7 @@ router.get(
 
     data.items = data.items.map((item) => ({
       ...item,
+      imageUrl: servedImageUrl(item.imageUrl),
       contentPageInfo: item.contentPage
         ? contentPageById.get(String(item.contentPage)) || null
         : null,

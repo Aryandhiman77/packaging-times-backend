@@ -65,8 +65,11 @@ app.use(
 
 app.use(cookieParser());
 
+// Keep uploaded assets behind the same /api proxy used by the frontend in
+// production. The legacy /uploads mount remains available for local installs
+// and old direct links.
 app.use(
-  "/uploads",
+  ["/api/uploads", "/uploads"],
   express.static(path.resolve("uploads"), {
     maxAge: "1d",
 
