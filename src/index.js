@@ -13,7 +13,7 @@ import publicRoutes from "./routes/public.js";
 import adminRoutes from "./routes/admin.js";
 import authRoutes from "./routes/auth.js";
 
-import { Settings, Subscriber } from "./models/index.js";
+import { Banner, Settings, Subscriber } from "./models/index.js";
 
 import { errorHandler, requireMongo } from "./middleware/validate.js";
 
@@ -120,6 +120,33 @@ app.use(errorHandler);
 
 const port = Number(process.env.PORT || 5000);
 
+async function ensureBannerScopeIndex() {
+  await Banner.init();
+
+  const indexes = await Banner.collection.indexes();
+
+  const legacy = indexes.find(
+    (index) =>
+      index.unique &&
+      Object.keys(index.key).length === 2 &&
+      index.key.page === 1 &&
+      index.key.slot === 1,
+  );
+
+  if (legacy) {
+    try {
+      await Banner.collection.dropIndex(legacy.name);
+    } catch (error) {
+      if (error.code !== 27 && error.codeName !== "IndexNotFound") throw error;
+    }
+  }
+
+  await Banner.collection.createIndex(
+    { page: 1, contentPage: 1, slot: 1 },
+    { unique: true, name: "banner_scope_slot_unique" },
+  );
+}
+
 async function start() {
   try {
     if (!process.env.MONGODB_URI) {
@@ -129,6 +156,8 @@ async function start() {
     await mongoose.connect(process.env.MONGODB_URI, {
       serverSelectionTimeoutMS: 8000,
     });
+
+    await ensureBannerScopeIndex();
 
     await Settings.updateOne(
       { key: "main" },
