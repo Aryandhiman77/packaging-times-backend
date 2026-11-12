@@ -102,8 +102,81 @@ export const schemas = {
   }).min(1),
 
   subscribe: Joi.object({
-    name: Joi.string().trim().max(120).allow("").optional(),
+    firstName: requiredText(1, 80),
+    lastName: requiredText(1, 80),
     email,
+    company: Joi.string().trim().max(150).allow("").default(""),
+    jobTitle: Joi.string().trim().max(150).allow("").default(""),
+    interests: Joi.array()
+      .items(
+        Joi.string().valid(
+          "flexible-packaging",
+          "rigid-packaging",
+          "packaging-trends",
+          "printing-graphics",
+          "machinery-automation",
+          "suppliers-services",
+          "all-packaging-news",
+        ),
+      )
+      .unique()
+      .default([]),
+    emailPreferences: Joi.array()
+      .items(
+        Joi.string().valid(
+          "packaging-brief",
+          "important-news-alerts",
+        ),
+      )
+      .unique()
+      .min(1)
+      .required(),
+    consent: Joi.boolean().valid(true).required(),
+  }),
+
+  subscriptionLookup: Joi.object({ email }),
+
+  subscriptionUpdate: Joi.object({
+    email,
+    firstName: Joi.string().trim().max(80).allow("").default(""),
+    lastName: Joi.string().trim().max(80).allow("").default(""),
+    company: Joi.string().trim().max(150).allow("").default(""),
+    jobTitle: Joi.string().trim().max(150).allow("").default(""),
+    interests: Joi.array()
+      .items(
+        Joi.string().valid(
+          "flexible-packaging",
+          "rigid-packaging",
+          "packaging-trends",
+          "printing-graphics",
+          "machinery-automation",
+          "suppliers-services",
+          "all-packaging-news",
+        ),
+      )
+      .unique()
+      .default([]),
+    emailPreferences: Joi.array()
+      .items(
+        Joi.string().valid(
+          "packaging-brief",
+          "important-news-alerts",
+        ),
+      )
+      .unique()
+      .min(1)
+      .required(),
+  }),
+
+  subscriptionEmail: Joi.object({
+    currentEmail: email,
+    newEmail: email,
+    confirmEmail: email,
+  }),
+
+  subscriptionUnsubscribe: Joi.object({
+    email,
+    confirm: Joi.boolean().valid(true).required(),
   }),
 
   contact: Joi.object({

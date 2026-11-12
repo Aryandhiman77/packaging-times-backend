@@ -208,22 +208,123 @@ router.post(
   formLimit,
   validateBody(schemas.subscribe),
   asyncHandler(async (req, res) => {
-    const email = req.body.email;
-
-    const result = await Subscriber.updateOne(
-      { email },
+    const { firstName, lastName, ...details } = req.body;
+    const existing = await Subscriber.exists({ email: details.email });
+    await Subscriber.findOneAndUpdate(
+      { email: details.email },
       {
-        $setOnInsert: {
-          name: req.body.name || "",
-          email,
+        $set: {
+          ...details,
+          firstName,
+          lastName,
+          name: `${firstName} ${lastName}`.trim(),
+          active: true,
+          unsubscribedAt: null,
         },
       },
-      { upsert: true },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
     );
 
-    res.status(result.upsertedCount ? 201 : 200).json({
-      message: "Thanks! Your subscription is saved.",
+    res.status(existing ? 200 : 201).json({
+      message: "Your free Packaging Times subscription has been received.",
     });
+  }),
+);
+
+router.post(
+  "/subscription/find",
+  formLimit,
+  validateBody(schemas.subscriptionLookup),
+  asyncHandler(async (req, res) => {
+    const subscriber = await Subscriber.findOne({ email: req.body.email })
+      .select(
+        "email firstName lastName company jobTitle interests emailPreferences active",
+      )
+      .lean();
+
+    if (!subscriber) {
+      return res.status(404).json({ message: "Subscription not found." });
+    }
+
+    res.json({ data: subscriber });
+  }),
+);
+
+router.patch(
+  "/subscription",
+  formLimit,
+  validateBody(schemas.subscriptionUpdate),
+  asyncHandler(async (req, res) => {
+    const { email, firstName, lastName, ...details } = req.body;
+    const subscriber = await Subscriber.findOneAndUpdate(
+      { email },
+      {
+        $set: {
+          ...details,
+          firstName,
+          lastName,
+          name: `${firstName} ${lastName}`.trim(),
+          active: true,
+          unsubscribedAt: null,
+        },
+      },
+      { new: true, runValidators: true },
+    );
+
+    if (!subscriber) {
+      return res.status(404).json({ message: "Subscription not found." });
+    }
+
+    res.json({ message: "Your subscription preferences have been saved." });
+  }),
+);
+
+router.patch(
+  "/subscription/email",
+  formLimit,
+  validateBody(schemas.subscriptionEmail),
+  asyncHandler(async (req, res) => {
+    const { currentEmail, newEmail, confirmEmail } = req.body;
+    if (newEmail !== confirmEmail) {
+      return res.status(422).json({ message: "New e-mail addresses do not match." });
+    }
+
+    const alreadyUsed =
+      currentEmail === newEmail
+        ? false
+        : await Subscriber.exists({ email: newEmail });
+    if (alreadyUsed && currentEmail !== newEmail) {
+      return res.status(409).json({ message: "That e-mail address is already subscribed." });
+    }
+
+    const subscriber = await Subscriber.findOneAndUpdate(
+      { email: currentEmail },
+      { $set: { email: newEmail } },
+      { new: true, runValidators: true },
+    );
+    if (!subscriber) {
+      return res.status(404).json({ message: "Subscription not found." });
+    }
+
+    res.json({ message: "Your e-mail address has been updated.", data: { email: newEmail } });
+  }),
+);
+
+router.post(
+  "/subscription/unsubscribe",
+  formLimit,
+  validateBody(schemas.subscriptionUnsubscribe),
+  asyncHandler(async (req, res) => {
+    const subscriber = await Subscriber.findOneAndUpdate(
+      { email: req.body.email },
+      { $set: { active: false, unsubscribedAt: new Date() } },
+      { new: true },
+    );
+    if (!subscriber) {
+      return res.status(404).json({ message: "Subscription not found." });
+    }
+
+    res.json({ message: "You have been unsubscribed from Packaging Times e-mail communications." });
   }),
 );
 

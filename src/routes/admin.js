@@ -642,7 +642,13 @@ router.patch(
 router.get(
   "/subscribers",
   asyncHandler(async (req, res) => {
-    const where = searchWhere(req.query.search, ["name", "email"]);
+    const where = searchWhere(req.query.search, [
+      "name",
+      "firstName",
+      "lastName",
+      "company",
+      "email",
+    ]);
     res.json({ data: await paginated(Subscriber, where, req) });
   }),
 );
@@ -651,7 +657,11 @@ router.delete(
   "/subscribers/:id",
   validateId,
   asyncHandler(async (req, res) => {
-    const item = await Subscriber.findByIdAndDelete(req.params.id);
+    const item = await Subscriber.findByIdAndUpdate(
+      req.params.id,
+      { $set: { active: false, unsubscribedAt: new Date() } },
+      { new: true },
+    );
     if (!item)
       return res.status(404).json({ message: "Subscriber not found." });
     res.json({ message: "Subscriber unsubscribed." });
