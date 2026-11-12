@@ -20,7 +20,28 @@ function inspect(buffer){
  if(buffer.length>=14&&['GIF87a','GIF89a'].includes(buffer.toString('ascii',0,6))&&buffer[buffer.length-1]===0x3b)return 'gif';
  return null;
 }
-export async function saveImage(file){if(!file)return null;const ext=inspect(file.buffer);if(!ext||file.mimetype!==({png:'image/png',jpg:'image/jpeg',webp:'image/webp',gif:'image/gif'})[ext])throw Object.assign(new Error('The uploaded image format or content is not valid.'),{status:415});
- const name=`${randomUUID()}.${ext}`;const folder=path.resolve('uploads');await mkdir(folder,{recursive:true});await writeFile(path.join(folder,name),file.buffer,{flag:'wx'});return `/uploads/${name}`;}
-export async function deleteImage(imageUrl){if(!imageUrl?.startsWith('/uploads/'))return;const basename=path.basename(imageUrl);if(basename!==imageUrl.slice('/uploads/'.length))return;try{await unlink(path.resolve('uploads',basename));}catch(e){if(e.code!=='ENOENT')console.warn(e.message);}}
+export async function saveImage(file) {
+ if (!file) return null;
+ const ext=inspect(file.buffer);
+ if (!ext||file.mimetype!==({png:'image/png',jpg:'image/jpeg',webp:'image/webp',gif:'image/gif'})[ext]) throw Object.assign(new Error('The uploaded image format or content is not valid.'),{status:415});
+ const name=`${randomUUID()}.${ext}`;
+ const folder=path.resolve('uploads');
+ await mkdir(folder,{recursive:true});
+ await writeFile(path.join(folder,name),file.buffer,{flag:'wx'});
+ return `/api/uploads/${name}`;
+}
+export function servedImageUrl(imageUrl) {
+ return imageUrl?.startsWith('/uploads/') ? `/api${imageUrl}` : imageUrl;
+}
+export async function deleteImage(imageUrl) {
+ const prefix=imageUrl?.startsWith('/api/uploads/')?'/api/uploads/':imageUrl?.startsWith('/uploads/')?'/uploads/':null;
+ if (!prefix) return;
+ const basename=path.basename(imageUrl);
+ if (basename!==imageUrl.slice(prefix.length)) return;
+ try {
+  await unlink(path.resolve('uploads',basename));
+ } catch(e) {
+  if(e.code!=='ENOENT') console.warn(e.message);
+ }
+}
 export const fileLimitBytes=MAX_BYTES;

@@ -16,6 +16,7 @@ import {
 } from "../models/index.js";
 
 import { asyncHandler } from "../middleware/validate.js";
+import { servedImageUrl } from "../utils/upload.js";
 
 import { deliverSubmission } from "../services/notifications.js";
 
@@ -127,10 +128,37 @@ router.get(
     }
 
     const now = new Date();
+    const requestedContentPage = String(req.query.contentPage || "")
+      .trim()
+      .toLowerCase();
+    let scopedContentPage = null;
+
+    if (STORY_CATEGORIES.includes(page)) {
+      const pageQuery = {
+        category: page,
+        status: "published",
+      };
+
+      if (requestedContentPage) {
+        pageQuery.slug = requestedContentPage;
+      }
+
+      scopedContentPage = await ContentPage.findOne(pageQuery)
+        .sort({ order: 1, createdAt: 1, _id: 1 })
+        .select("_id")
+        .lean();
+    }
+
+    const allowedScopes = [{ contentPage: null }];
+
+    if (scopedContentPage) {
+      allowedScopes.push({ contentPage: scopedContentPage._id });
+    }
 
     const items = await Banner.find({
       page: { $in: ["global", page] },
       isActive: true,
+      $or: allowedScopes,
       $and: [
         {
           $or: [{ startsAt: null }, { startsAt: { $lte: now } }],
@@ -147,15 +175,25 @@ router.get(
       .lean();
 
     const slots = {};
+    const scopedId = scopedContentPage ? String(scopedContentPage._id) : "";
 
     const ordered = [
-      ...items.filter((x) => x.page === page),
-      ...items.filter((x) => x.page === "global"),
+      ...items.filter(
+        (x) =>
+          x.page === page &&
+          scopedId &&
+          String(x.contentPage || "") === scopedId,
+      ),
+      ...items.filter((x) => x.page === page && !x.contentPage),
+      ...items.filter((x) => x.page === "global" && !x.contentPage),
     ];
 
     for (const item of ordered) {
       if (!slots[item.slot]) {
-        slots[item.slot] = item;
+        slots[item.slot] = {
+          ...item,
+          imageUrl: servedImageUrl(item.imageUrl),
+        };
       }
     }
 

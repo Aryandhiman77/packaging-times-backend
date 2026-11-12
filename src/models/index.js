@@ -43,6 +43,11 @@ const bannerSchema = new Schema(
       required: true,
       default: "home",
     },
+    contentPage: {
+      type: Schema.Types.ObjectId,
+      ref: "ContentPage",
+      default: null,
+    },
     slot: {
       type: String,
       enum: AD_SLOTS,
@@ -79,7 +84,12 @@ const bannerSchema = new Schema(
   { timestamps: true },
 );
 
-bannerSchema.index({ page: 1, slot: 1 }, { unique: true });
+// A category can reuse the same ad slot on each editor-produced page.
+// A null contentPage keeps the existing global/category-level banner behavior.
+bannerSchema.index(
+  { page: 1, contentPage: 1, slot: 1 },
+  { unique: true, name: "banner_scope_slot_unique" },
+);
 
 export const Banner = model("Banner", bannerSchema);
 

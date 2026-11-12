@@ -55,6 +55,14 @@ export const schemas = {
     page: Joi.string()
       .valid(...ALL_PAGES)
       .required(),
+    contentPage: Joi.string()
+      .custom((value, helpers) =>
+        value === "" || mongoose.isValidObjectId(value)
+          ? value
+          : helpers.error("any.invalid"),
+      )
+      .allow("", null)
+      .default(""),
     slot: Joi.string()
       .valid(...AD_SLOTS)
       .required(),

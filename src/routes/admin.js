@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { schemas, validateBody, validateId } from "../middleware/joi.js";
 import { asyncHandler } from "../middleware/validate.js";
-import { oneImage, saveImage, deleteImage } from "../utils/upload.js";
+import {
+  oneImage,
+  saveImage,
+  deleteImage,
+  servedImageUrl,
+} from "../utils/upload.js";
 import sanitizeHtml from "sanitize-html";
 import {
   Banner,
@@ -64,7 +69,16 @@ const cleanContent = (raw) =>
 
         "text-align": [/^(left|right|center|justify)$/],
 
-        "font-size": [/^\d+(px|em|rem|%)$/],
+        "font-size": [/^\d+(?:\.\d+)?(px|em|rem|%)$/],
+
+        "font-family": [
+          /^(?:["']?[a-zA-Z][a-zA-Z0-9 -]*["']?)(?:,\s*(?:["']?[a-zA-Z][a-zA-Z0-9 -]*["']?))*$/,
+        ],
+
+        "line-height": [
+          /^\d+(?:\.\d+)?$/,
+          /^\d+(?:\.\d+)?(px|em|rem|%)$/,
+        ],
       },
     },
 
@@ -145,6 +159,7 @@ const bannerData = (b) => ({
   title: b.title,
   altText: b.altText || "",
   page: b.page,
+  contentPage: b.contentPage || null,
   slot: b.slot,
   targetUrl: b.targetUrl || "",
   priority: Number(b.priority || 0),
@@ -156,7 +171,30 @@ function dateRangeOk(data) {
   return !(data.startsAt && data.endsAt && data.startsAt > data.endsAt);
 }
 
-// Upload image from CKEditor.
+async function validateBannerScope(data) {
+  if (!data.contentPage) return;
+
+  if (!STORY_CATEGORIES.includes(data.page)) {
+    throw Object.assign(
+      new Error("Individual content pages can only be selected for category banners."),
+      { status: 422 },
+    );
+  }
+
+  const exists = await ContentPage.exists({
+    _id: data.contentPage,
+    category: data.page,
+  });
+
+  if (!exists) {
+    throw Object.assign(
+      new Error("The selected content page does not belong to this category."),
+      { status: 422 },
+    );
+  }
+}
+
+// Upload an image from the category content editor.
 
 router.post(
   "/content-images",
@@ -252,6 +290,25 @@ router.get(
   }),
 );
 
+// Lightweight page list used by the banner editor to scope an ad to one
+// editor-produced category page.
+
+router.get(
+  "/content-page-options/:category",
+  asyncHandler(async (req, res) => {
+    if (!STORY_CATEGORIES.includes(req.params.category)) {
+      return res.status(400).json({ message: "Invalid category." });
+    }
+
+    const items = await ContentPage.find({ category: req.params.category })
+      .sort({ order: 1, createdAt: 1, _id: 1 })
+      .select("title slug order status")
+      .lean();
+
+    res.json({ data: items });
+  }),
+);
+
 // Create a new content page.
 
 router.post(
@@ -339,8 +396,15 @@ router.delete(
       });
     }
 
+    const scopedBanners = await Banner.find({ contentPage: removed._id })
+      .select("imageUrl")
+      .lean();
+
+    await Banner.deleteMany({ contentPage: removed._id });
+    await Promise.all(scopedBanners.map((banner) => deleteImage(banner.imageUrl)));
+
     res.json({
-      message: "Page deleted.",
+      message: "Page and its page-specific banners deleted.",
     });
   }),
 );
@@ -441,8 +505,24 @@ router.get(
     }
 
     const data = await paginated(Banner, where, req);
+    const contentPageIds = data.items
+      .map((item) => item.contentPage)
+      .filter(Boolean);
+    const contentPages = await ContentPage.find({
+      _id: { $in: contentPageIds },
+    })
+      .select("title slug order status")
+      .lean();
+    const contentPageById = new Map(
+      contentPages.map((item) => [String(item._id), item]),
+    );
+
     data.items = data.items.map((item) => ({
       ...item,
+      imageUrl: servedImageUrl(item.imageUrl),
+      contentPageInfo: item.contentPage
+        ? contentPageById.get(String(item.contentPage)) || null
+        : null,
       lifecycleStatus: bannerLifecycle(item),
     }));
     res.json({ data });
@@ -458,15 +538,20 @@ router.post(
         .status(422)
         .json({ message: "Choose one image to create a banner." });
     const data = bannerData(req.body);
+    await validateBannerScope(data);
     if (!dateRangeOk(data))
       return res
         .status(422)
         .json({ message: "End date must be after start date." });
-    const existing = await Banner.exists({ page: data.page, slot: data.slot });
+    const existing = await Banner.exists({
+      page: data.page,
+      contentPage: data.contentPage,
+      slot: data.slot,
+    });
     if (existing)
       return res.status(409).json({
         message:
-          "A banner already exists in this slot. Edit that banner to replace it.",
+          "A banner already exists in this page and slot. Edit that banner to replace it.",
       });
     const imageUrl = await saveImage(req.file);
     try {
@@ -487,12 +572,14 @@ router.patch(
     const item = await Banner.findById(req.params.id);
     if (!item) return res.status(404).json({ message: "Banner not found." });
     const data = bannerData(req.body);
+    await validateBannerScope(data);
     if (!dateRangeOk(data))
       return res
         .status(422)
         .json({ message: "End date must be after start date." });
     const other = await Banner.exists({
       page: data.page,
+      contentPage: data.contentPage,
       slot: data.slot,
       _id: { $ne: item._id },
     });
