@@ -23,6 +23,7 @@ import {
 import { deliverSubmission } from "../services/notifications.js";
 const router = Router();
 const PAGE_SIZE = 10;
+const DEFAULT_PACKAGING_BRIEF_HTML = "<h1>PACKAGING BRIEF</h1><p></p>";
 
 const cleanContent = (raw) =>
   sanitizeHtml(raw, {
@@ -107,9 +108,9 @@ router.get(
   asyncHandler(async (_req, res) => {
     const item = await PackagingBrief.findOne({ key: "main" }).lean();
     res.json({
-      data: item || {
-        html: "<h1>PACKAGING BRIEF</h1><p></p>",
-        updatedAt: null,
+      data: {
+        ...(item || { updatedAt: null }),
+        html: item?.html?.trim() || DEFAULT_PACKAGING_BRIEF_HTML,
       },
     });
   }),

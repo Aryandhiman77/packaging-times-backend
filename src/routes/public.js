@@ -22,6 +22,7 @@ import { servedImageUrl } from "../utils/upload.js";
 import { deliverSubmission } from "../services/notifications.js";
 
 const router = Router();
+const DEFAULT_PACKAGING_BRIEF_HTML = "<h1>PACKAGING BRIEF</h1><p></p>";
 
 const formLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -48,7 +49,10 @@ router.get(
       .lean();
 
     res.json({
-      data: item || { html: "<h1>PACKAGING BRIEF</h1><p></p>", updatedAt: null },
+      data: {
+        ...(item || { updatedAt: null }),
+        html: item?.html?.trim() || DEFAULT_PACKAGING_BRIEF_HTML,
+      },
     });
   }),
 );
