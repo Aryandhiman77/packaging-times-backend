@@ -19,6 +19,10 @@ const optionalUrl = Joi.string()
   .optional();
 
 export const schemas = {
+  packagingBrief: Joi.object({
+    html: Joi.string().min(1).max(200000).required(),
+  }),
+
   contentPage: Joi.object({
     category: Joi.string()
       .valid(...STORY_CATEGORIES)

@@ -254,6 +254,26 @@ contentPageSchema.index({
 
 export const ContentPage = model("ContentPage", contentPageSchema);
 
+const packagingBriefSchema = new Schema(
+  {
+    key: {
+      type: String,
+      default: "main",
+      unique: true,
+      immutable: true,
+    },
+    html: {
+      type: String,
+      required: true,
+      maxlength: 200000,
+      default: "<h1>PACKAGING BRIEF</h1><p></p>",
+    },
+  },
+  { timestamps: true },
+);
+
+export const PackagingBrief = model("PackagingBrief", packagingBriefSchema);
+
 const settingsSchema = new Schema(
   {
     key: {

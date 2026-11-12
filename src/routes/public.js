@@ -12,6 +12,7 @@ import {
   AdvertisingInquiry,
   ALL_PAGES,
   ContentPage,
+  PackagingBrief,
   STORY_CATEGORIES,
 } from "../models/index.js";
 
@@ -38,6 +39,19 @@ router.get("/health", (req, res) => {
     service: "packaging-times-api",
   });
 });
+
+router.get(
+  "/packaging-brief",
+  asyncHandler(async (_req, res) => {
+    const item = await PackagingBrief.findOne({ key: "main" })
+      .select("html updatedAt")
+      .lean();
+
+    res.json({
+      data: item || { html: "<h1>PACKAGING BRIEF</h1><p></p>", updatedAt: null },
+    });
+  }),
+);
 
 // Fetch published page list for a category.
 // HTML body is excluded from this list.

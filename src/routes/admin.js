@@ -16,6 +16,7 @@ import {
   Contact,
   AdvertisingInquiry,
   ContentPage,
+  PackagingBrief,
   STORY_CATEGORIES,
 } from "../models/index.js";
 
@@ -100,6 +101,33 @@ const cleanContent = (raw) =>
       }),
     },
   });
+
+router.get(
+  "/packaging-brief",
+  asyncHandler(async (_req, res) => {
+    const item = await PackagingBrief.findOne({ key: "main" }).lean();
+    res.json({
+      data: item || {
+        html: "<h1>PACKAGING BRIEF</h1><p></p>",
+        updatedAt: null,
+      },
+    });
+  }),
+);
+
+router.patch(
+  "/packaging-brief",
+  validateBody(schemas.packagingBrief),
+  asyncHandler(async (req, res) => {
+    const item = await PackagingBrief.findOneAndUpdate(
+      { key: "main" },
+      { $set: { html: cleanContent(req.body.html) } },
+      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+    );
+
+    res.json({ data: item, message: "Packaging Brief content saved." });
+  }),
+);
 
 const slugTaken = (err) => err?.code === 11000;
 
