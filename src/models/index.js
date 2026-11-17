@@ -10,7 +10,6 @@ export const PAGE_NAMES = [
   "trends",
   "subscribe",
   "contact",
-  "shopping-cart",
 ];
 
 export const ALL_PAGES = ["global", ...PAGE_NAMES];
@@ -164,7 +163,13 @@ export const News = model("News", newsSchema);
 
 // Every document represents one category content page.
 
-export const STORY_CATEGORIES = ["trends", "flexibles", "rigid", "advertising"];
+export const STORY_CATEGORIES = [
+  "home",
+  "trends",
+  "flexibles",
+  "rigid",
+  "advertising",
+];
 
 const contentPageSchema = new Schema(
   {

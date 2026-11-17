@@ -149,32 +149,30 @@ router.get(
     const requestedContentPage = String(req.query.contentPage || "")
       .trim()
       .toLowerCase();
-    let scopedContentPage = null;
-
-    if (STORY_CATEGORIES.includes(page)) {
-      const pageQuery = {
-        category: page,
-        status: "published",
-      };
-
-      if (requestedContentPage) {
-        pageQuery.slug = requestedContentPage;
-      }
-
-      scopedContentPage = await ContentPage.findOne(pageQuery)
-        .sort({ order: 1, createdAt: 1, _id: 1 })
-        .select("_id")
-        .lean();
-    }
-
+    const homePages = await ContentPage.find({
+      category: "home",
+      status: "published",
+    })
+      .sort({ order: 1, createdAt: 1, _id: 1 })
+      .select("_id slug order")
+      .lean();
+    const defaultContentPage = homePages[0] || null;
+    const requestedHomePage = requestedContentPage
+      ? homePages.find((item) => item.slug === requestedContentPage) || null
+      : null;
+    const scopedContentPage = requestedHomePage || defaultContentPage;
+    const scopeIds = [scopedContentPage?._id, defaultContentPage?._id].filter(
+      (value, index, list) =>
+        value && list.findIndex((item) => String(item) === String(value)) === index,
+    );
     const allowedScopes = [{ contentPage: null }];
 
-    if (scopedContentPage) {
-      allowedScopes.push({ contentPage: scopedContentPage._id });
+    if (scopeIds.length) {
+      allowedScopes.push({ contentPage: { $in: scopeIds } });
     }
 
     const items = await Banner.find({
-      page: { $in: ["global", page] },
+      page: { $in: ["global", "home"] },
       isActive: true,
       $or: allowedScopes,
       $and: [
@@ -194,15 +192,23 @@ router.get(
 
     const slots = {};
     const scopedId = scopedContentPage ? String(scopedContentPage._id) : "";
+    const defaultId = defaultContentPage ? String(defaultContentPage._id) : "";
 
     const ordered = [
       ...items.filter(
         (x) =>
-          x.page === page &&
+          x.page === "home" &&
           scopedId &&
           String(x.contentPage || "") === scopedId,
       ),
-      ...items.filter((x) => x.page === page && !x.contentPage),
+      ...items.filter(
+        (x) =>
+          x.page === "home" &&
+          defaultId &&
+          defaultId !== scopedId &&
+          String(x.contentPage || "") === defaultId,
+      ),
+      ...items.filter((x) => x.page === "home" && !x.contentPage),
       ...items.filter((x) => x.page === "global" && !x.contentPage),
     ];
 
