@@ -161,18 +161,22 @@ router.get(
       ? homePages.find((item) => item.slug === requestedContentPage) || null
       : null;
     const scopedContentPage = requestedHomePage || defaultContentPage;
-    const scopeIds = [scopedContentPage?._id, defaultContentPage?._id].filter(
-      (value, index, list) =>
-        value && list.findIndex((item) => String(item) === String(value)) === index,
+    const isContinuationPage = Boolean(
+      requestedHomePage &&
+        defaultContentPage &&
+        String(requestedHomePage._id) !== String(defaultContentPage._id),
     );
-    const allowedScopes = [{ contentPage: null }];
-
-    if (scopeIds.length) {
-      allowedScopes.push({ contentPage: { $in: scopeIds } });
-    }
+    const allowedScopes = isContinuationPage
+      ? [{ contentPage: scopedContentPage._id }]
+      : [
+          { contentPage: null },
+          ...(defaultContentPage
+            ? [{ contentPage: defaultContentPage._id }]
+            : []),
+        ];
 
     const items = await Banner.find({
-      page: { $in: ["global", "home"] },
+      page: isContinuationPage ? "home" : { $in: ["global", "home"] },
       isActive: true,
       $or: allowedScopes,
       $and: [
@@ -194,23 +198,23 @@ router.get(
     const scopedId = scopedContentPage ? String(scopedContentPage._id) : "";
     const defaultId = defaultContentPage ? String(defaultContentPage._id) : "";
 
-    const ordered = [
-      ...items.filter(
-        (x) =>
-          x.page === "home" &&
-          scopedId &&
-          String(x.contentPage || "") === scopedId,
-      ),
-      ...items.filter(
-        (x) =>
-          x.page === "home" &&
-          defaultId &&
-          defaultId !== scopedId &&
-          String(x.contentPage || "") === defaultId,
-      ),
-      ...items.filter((x) => x.page === "home" && !x.contentPage),
-      ...items.filter((x) => x.page === "global" && !x.contentPage),
-    ];
+    const ordered = isContinuationPage
+      ? items.filter(
+          (x) =>
+            x.page === "home" &&
+            scopedId &&
+            String(x.contentPage || "") === scopedId,
+        )
+      : [
+          ...items.filter(
+            (x) =>
+              x.page === "home" &&
+              defaultId &&
+              String(x.contentPage || "") === defaultId,
+          ),
+          ...items.filter((x) => x.page === "home" && !x.contentPage),
+          ...items.filter((x) => x.page === "global" && !x.contentPage),
+        ];
 
     for (const item of ordered) {
       if (!slots[item.slot]) {
